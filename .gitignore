@@ -1,0 +1,23 @@
+# Python virtual environments
+.venv/
+venv/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local settings and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# IDE / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Agents' instruction files
+AGENTS.md
