@@ -1,0 +1,8 @@
+{
+  "name": "MazeSolver.PlayModeTests",
+  "references": ["MazeSolver.Runtime"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll", "Newtonsoft.Json.dll"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "autoReferenced": false
+}

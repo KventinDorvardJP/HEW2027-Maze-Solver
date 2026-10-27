@@ -18,7 +18,7 @@ A 2D maze simulation in which a **local large language model (LLM)** tries to re
 | Communication | HTTP + JSON over `localhost` | Connects Unity, Python, and Ollama |
 | Collaboration | Git + GitHub | Source control and team coordination |
 
-All developers should use the same Unity editor version. Keep Python dependencies recorded in `backend/requirements.txt`.
+All developers should use the same Unity editor version. Python dependencies are recorded in the repository-root `requirements.txt`.
 
 ## Repository layout
 
@@ -31,10 +31,11 @@ HEW2027-Maze-Solver/
 ├── backend/                # Python API and Ollama integration
 │   ├── app/
 │   ├── tests/
-│   └── requirements.txt
+│   └── smoke_decision.py    # One real backend/Ollama decision check
 ├── docs/                   # Requirements, architecture, protocol, setup
 ├── examples/               # Sample requests and responses
 ├── .gitignore
+├── requirements.txt        # Python dependencies (root)
 └── README.md
 ```
 
@@ -62,29 +63,24 @@ Always commit Unity `.meta` files. Do **not** commit generated folders such as `
 Install **Python 3.14.10 (64-bit)**. In PowerShell, from the repository root:
 
 ```powershell
-cd backend
 py -3.14 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-The `requirements.txt` file must exist before the install command. If it has not been created yet, the initial backend setup is:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install fastapi uvicorn httpx pytest
-.\.venv\Scripts\python.exe -m pip freeze > requirements.txt
 ```
 
 Commit `requirements.txt`, **not** `.venv/`.
 
 ### 4. Run the Python API
 
-Once `backend/app/main.py` defines a FastAPI application named `app`, run this from `backend/`:
+Run this from the **repository root**, using the root virtual environment:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-For an initial connectivity test, the backend may implement `GET /health` returning `{"status":"ok"}`. If that endpoint has been implemented, visit <http://127.0.0.1:8000/health>.
+Visit <http://127.0.0.1:8000/health>; it should show `{"status":"ok"}`.
+Interactive API documentation is at <http://127.0.0.1:8000/docs>.
+Keep this terminal running. Use one backend worker: session history is held in
+memory and is not shared across processes. Reloading the backend clears history.
 
 **Note:** The health endpoint confirms the Python server responds; it does not demonstrate that the LLM navigation loop works.
 
@@ -99,13 +95,70 @@ ollama run llama3.2:3b
 
 Ollama normally exposes its local API at `http://127.0.0.1:11434`. The Python backend is a **separate** service at `http://127.0.0.1:8000`. Ollama must be running for actual model decisions.
 
+### 6. Try one real decision
+
+With Ollama and the backend running, open another PowerShell terminal at the
+repository root and run:
+
+```powershell
+.\.venv\Scripts\python.exe backend\smoke_decision.py
+```
+
+The script loads `examples/decide-request.json`, creates a fresh session ID,
+checks health, and requests one decision from the real model. HTTP `200` with a
+`move` object confirms the Python/Ollama connection and move validation worked.
+It does not move a Unity agent or report a fictional movement outcome. A model
+error is a visible failure; it does not trigger a replacement move.
+
+To inspect requests manually, open `/docs`, expand `POST /decide`, click
+**Try it out**, and paste `examples/decide-request.json`. Change `session_id`
+for each new run. Once an actual client executes the requested move, it reports
+the actual result to `POST /outcome` before asking for another decision.
+`examples/outcome-request.json` illustrates a successful move to `(1,2)`;
+use it only when that is the actual result. The backend checks consistency but
+cannot independently prove a client's wall or movement report.
+
+After an error, begin a new session. Do not retry the same turn automatically.
+Backend observations, raw model replies, outcomes, and errors appear in its
+console. Histories persist only until the process restarts.
+
+### 7. Run the backend tests
+
+From the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest backend/tests -q
+```
+
+Automated tests use explicit fake model replies and HTTP transports; they do
+not require Ollama and do not prove real model quality or Unity behavior.
+The installed FastAPI/Starlette stack may emit an HTTPX deprecation warning
+during tests; this does not indicate a failed check.
+
+### 8. Play the Unity prototype
+
+1. Keep Ollama and the backend running.
+2. Open `unity/` in Unity 6000.3.26f1 and let packages finish importing.
+3. Accept a Unity restart if prompted for the **Both** input-handling setting.
+4. Open **Assets > Scenes > SampleScene**, press **Play**, and select **Game**.
+5. Click **Check backend**, then **Step** to request one real model decision.
+6. Use **Run** for repeated turns, **Pause** to stop after the current turn,
+   and **Reset** to begin a fresh session at the start.
+
+The scene is already wired. The maze and controls are generated when Play
+starts; no manual component setup is needed. Walls do not move the agent. A
+model failure or HTTP error stops the run visibly; Reset starts a new session.
+See [the Unity demo guide](docs/unity-demo.md) for controls and test instructions.
+
 ## How a navigation turn works
 
 1. **Unity** sends the current position, goal, nearby tiles, and previous outcome to **Python**.
 2. **Python** builds a prompt and asks **Ollama** for the next attempted move.
 3. **Python** validates the model response and returns the requested coordinate to Unity.
 4. **Unity** checks that the request moves exactly one tile up, down, left, or right and applies collision rules.
-5. **Unity** logs the actual outcome, then sends the next observation. Repeat until the goal is reached or the simulation stops.
+5. **Unity** logs the actual outcome and sends it to `POST /outcome`, including
+   the final goal outcome. After acknowledgement, it sends the next observation.
+   Repeat until the goal is reached or the simulation stops.
 
 Example proposed move request:
 
@@ -159,12 +212,36 @@ Avoid editing the same Unity scene in different branches at the same time. Coord
 
 ## Testing and current status
 
-**Current status:** Repository structure and development instructions are specified here. This README does **not** claim that the game, backend, full LLM loop, or automated tests have been implemented or verified.
+**Implemented for Version 0.3:** Python `/health`, `/decide`, and `/outcome`;
+strict request/model validation; asynchronous local Ollama calls; per-session
+history; error responses; console logging; automated backend tests; and a manual
+real-model smoke-check script. Unity now has a fixed 10 x 10 maze, an agent,
+Step/Run/Pause/Reset controls, goal detection, a scrollable decision/outcome log,
+and a coroutine HTTP client. The implementation follows the protocol draft;
+team approval of that document remains a separate review step.
+
+**Remaining:** Review the protocol with the team and perform the manual demo
+checks on teammates' machines. Version 0.5/1.0 features are not implemented.
+The model can request walls or fail to solve the maze; the game reports actual
+outcomes and never substitutes a pathfinding algorithm.
+
+See [the backend verification record](docs/backend-verification.md) for commands,
+actual results, tested Python version, and limitations.
+The [Unity verification record](docs/unity-verification.md) contains the rendered
+screenshot and results: 17 EditMode tests and 10 PlayMode tests passed, including
+a real Unity/Python/Ollama turn with an acknowledged blocked outcome. Goal
+completion was tested with test-only inputs; the live model was not shown to
+finish the maze. No standalone Windows build was tested.
+The later [navigation verification](docs/navigation-verification.md) records
+39 passing backend tests and 10 passing Unity PlayMode tests with three actual
+model-driven moves, ending at `(3,2)`. The first prompt repeatedly requested a
+wall; the updated prompt/memory and adjacent-coordinate output schema demonstrate
+movement beyond the start. Longer runs can still loop or hit walls.
 
 Recommended first smoke tests:
 
 - Unity project opens on a teammate's machine without missing assets.
-- Python `GET /health` responds once implemented.
+- Python `GET /health` responds.
 - Unity can call the Python endpoint without freezing.
 - Backend calls the actual Ollama model and validates its JSON response.
 - Unity rejects invalid moves and reports the true outcome.

@@ -21,3 +21,6 @@ Thumbs.db
 
 # Agents' instruction files
 AGENTS.md
+
+# Isolated Unity verification copy and test artifacts
+/.verification/

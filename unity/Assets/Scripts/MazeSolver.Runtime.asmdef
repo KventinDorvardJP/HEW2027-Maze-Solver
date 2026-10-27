@@ -1,0 +1,6 @@
+{
+  "name": "MazeSolver.Runtime",
+  "rootNamespace": "MazeSolver",
+  "references": [],
+  "autoReferenced": true
+}
