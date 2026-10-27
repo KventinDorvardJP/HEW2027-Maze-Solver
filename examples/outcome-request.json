@@ -1,0 +1,10 @@
+{
+  "session_id": "manual-example-001",
+  "turn": 0,
+  "outcome": {
+    "success": true,
+    "status": "moved",
+    "position": {"x": 1, "y": 2},
+    "reason": null
+  }
+}
